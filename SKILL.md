@@ -172,10 +172,12 @@ just add the `commit-msg` hook file alongside any existing hooks.
 
 Ask the user:
 
-> Would you like me to create a GitHub Actions workflow for automated releases?
-> This runs semantic-release on pushes to your main branch.
+> Would you like me to create GitHub Actions workflows for PR checks, merge gating,
+> and automated releases?
 
-**If yes**, create `.github/workflows/release.yml`:
+**If yes**, create three workflow files. Replace `main` with the actual default branch in all three.
+
+#### `.github/workflows/release.yml` — runs semantic-release after merge to main
 
 ```yaml
 name: Release
@@ -213,11 +215,93 @@ jobs:
         run: npx semantic-release
 ```
 
+#### `.github/workflows/pr.yml` — runs checks when a PR is opened or updated
+
+```yaml
+name: PR Checks
+on:
+  pull_request:
+    branches: [main]
+
+jobs:
+  commitlint:
+    name: Validate Commits
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 'lts/*'
+      - run: npm ci
+      - name: Validate commit messages
+        run: npx commitlint --from ${{ github.event.pull_request.base.sha }} --to ${{ github.event.pull_request.head.sha }} --verbose
+
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 'lts/*'
+      - run: npm ci
+      - run: npm run lint --if-present
+
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 'lts/*'
+      - run: npm ci
+      - run: npm test --if-present
+```
+
+#### `.github/workflows/merge.yml` — merge gate (single status check for branch protection)
+
+This runs the same checks as `pr.yml` but as a single job, producing one status check
+name (`Merge Gate`) that can be required in GitHub branch protection settings.
+
+```yaml
+name: Merge Gate
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened]
+
+jobs:
+  merge-gate:
+    name: Merge Gate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 'lts/*'
+
+      - run: npm ci
+
+      - name: Validate commits
+        run: npx commitlint --from ${{ github.event.pull_request.base.sha }} --to ${{ github.event.pull_request.head.sha }} --verbose
+
+      - name: Lint
+        run: npm run lint --if-present
+
+      - name: Test
+        run: npm test --if-present
+```
+
 Remind the user:
 - `GITHUB_TOKEN` is provided automatically by GitHub Actions
 - `NPM_TOKEN` is only needed if publishing to npm — they can set it in repo Settings > Secrets
-
-Replace `main` in the workflow branches with the actual default branch.
+- The `Merge Gate` job name is what they'll set as a required status check in branch protection
 
 ### Step 7: Check for monorepo
 
@@ -388,7 +472,8 @@ gh api repos/{owner}/{repo}/branches/main/protection \
 
 Replace `{owner}/{repo}` with the actual values from `gh repo view --json owner,name`.
 
-If the repo has a CI workflow (from Phase 3 Step 6), also enable required status checks:
+If the repo has CI workflows (from Phase 3 Step 6), enable the `Merge Gate` job as a
+required status check so PRs cannot merge unless all checks pass:
 
 ```bash
 gh api repos/{owner}/{repo}/branches/main/protection \
@@ -399,11 +484,12 @@ gh api repos/{owner}/{repo}/branches/main/protection \
   -F "enforce_admins=true" \
   -f "restrictions=null" \
   -f "required_status_checks[strict]=true" \
-  -f "required_status_checks[contexts][]=Release"
+  -f "required_status_checks[contexts][]=Merge Gate"
 ```
 
 Remind the user:
 - `enforce_admins: true` means even repo admins cannot bypass the rules
+- `Merge Gate` is the job name from `merge.yml` — it validates commits, runs lint, and runs tests
 - They can adjust these settings later in GitHub repo Settings > Branches
 
 ---
