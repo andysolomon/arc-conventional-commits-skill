@@ -8,6 +8,7 @@ A Claude Code skill that injects [Conventional Commits](https://www.conventional
 - **Installs** semantic-release with the full plugin chain (commit-analyzer, release-notes-generator, changelog, npm, github, git)
 - **Configures** the Conventional Commits preset so `fix:` = PATCH, `feat:` = MINOR, `BREAKING CHANGE` = MAJOR
 - **Optionally** sets up commitlint + husky for commit message enforcement and GitHub Actions for CI
+- **Protects main** with three layers: git pre-commit hook, Claude Code PreToolUse hook, and GitHub branch protection rules
 
 ## Install
 
@@ -54,3 +55,15 @@ Once installed, the skill triggers when you ask Claude Code things like:
 | `feat!:` | MAJOR (x.0.0) | `feat!: drop support for Node 14` |
 
 Valid types: `feat`, `fix`, `build`, `chore`, `ci`, `docs`, `style`, `refactor`, `perf`, `test`
+
+## Branch Protection
+
+The skill sets up three layers to prevent direct commits to main:
+
+| Layer | What it does | Where it runs |
+|-------|-------------|---------------|
+| **Husky pre-commit hook** | Blocks `git commit` on main | Local terminal |
+| **Claude Code PreToolUse hook** | Prompts for approval when Claude tries to commit on main | Claude Code sessions |
+| **GitHub branch protection** | Requires PRs with reviews to merge into main | GitHub server-side |
+
+This ensures all changes go through feature branches and pull requests.

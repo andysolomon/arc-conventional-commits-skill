@@ -21,7 +21,7 @@ specification and [semantic-release](https://github.com/semantic-release/semanti
 The workflow is conversational — always confirm with the user before making
 destructive changes like removing existing tooling.
 
-Follow these four phases in order.
+Follow these five phases in order.
 
 ---
 
@@ -260,6 +260,151 @@ After installation:
    chore: update dev dependencies
    → no version bump, appears in changelog
    ```
+
+---
+
+## Phase 5 — Branch Protection
+
+Conventional commits work best when all changes flow through branches and PRs.
+This phase sets up three layers of protection to prevent direct commits to main.
+
+### Step 1: Install husky pre-commit hook
+
+This blocks `git commit` on main from the terminal.
+
+```bash
+npm install --save-dev husky
+npx husky init
+```
+
+Replace the contents of `.husky/pre-commit` with:
+
+```sh
+#!/bin/sh
+branch=$(git rev-parse --abbrev-ref HEAD)
+if [ "$branch" = "main" ] || [ "$branch" = "master" ]; then
+  echo ""
+  echo "  Direct commits to $branch are not allowed."
+  echo "  Create a feature branch and open a PR instead:"
+  echo ""
+  echo "    git checkout -b feat/your-feature"
+  echo ""
+  exit 1
+fi
+```
+
+If `.husky/` already exists, do not run `npx husky init` — just replace the `pre-commit` file.
+If a `.husky/commit-msg` hook exists (from Phase 3 Step 5), leave it in place.
+
+### Step 2: Install Claude Code PreToolUse hook
+
+This prevents Claude from staging or committing on main. It prompts the user for
+approval so they can override if truly needed.
+
+Create `.claude/hooks/protect-main.sh` in the target repo:
+
+```bash
+#!/bin/bash
+INPUT=$(cat)
+COMMAND=$(echo "$INPUT" | jq -r '.tool_input.command // empty')
+
+if ! echo "$COMMAND" | grep -qE "^git (add|commit)"; then
+  exit 0
+fi
+
+CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD 2>/dev/null)
+
+if [ "$CURRENT_BRANCH" = "main" ] || [ "$CURRENT_BRANCH" = "master" ]; then
+  if echo "$COMMAND" | grep -qE "^git add"; then
+    jq -n '{
+      hookSpecificOutput: {
+        hookEventName: "PreToolUse",
+        permissionDecision: "ask",
+        permissionDecisionReason: "You are about to stage files on main. Create a feature branch instead."
+      }
+    }'
+  else
+    jq -n '{
+      hookSpecificOutput: {
+        hookEventName: "PreToolUse",
+        permissionDecision: "ask",
+        permissionDecisionReason: "You are about to commit directly to main. Create a feature branch instead."
+      }
+    }'
+  fi
+  exit 0
+fi
+
+exit 0
+```
+
+Make it executable:
+```bash
+chmod +x .claude/hooks/protect-main.sh
+```
+
+Then create or update `.claude/settings.json` to register the hook. If the file
+already exists, merge the `hooks` key into the existing config — do not overwrite
+other settings.
+
+```json
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": ".claude/hooks/protect-main.sh"
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+
+### Step 3: Configure GitHub branch protection
+
+Ask the user:
+
+> Would you like me to set up GitHub branch protection rules on main?
+> This requires admin access and enforces PRs at the server level.
+
+**If yes**, use the GitHub CLI:
+
+```bash
+gh api repos/{owner}/{repo}/branches/main/protection \
+  -X PUT \
+  -H "Accept: application/vnd.github+json" \
+  -f "required_pull_request_reviews[dismiss_stale_reviews]=false" \
+  -f "required_pull_request_reviews[require_code_owner_reviews]=false" \
+  -F "required_pull_request_reviews[required_approving_review_count]=1" \
+  -F "enforce_admins=true" \
+  -f "restrictions=null" \
+  -f "required_status_checks=null"
+```
+
+Replace `{owner}/{repo}` with the actual values from `gh repo view --json owner,name`.
+
+If the repo has a CI workflow (from Phase 3 Step 6), also enable required status checks:
+
+```bash
+gh api repos/{owner}/{repo}/branches/main/protection \
+  -X PUT \
+  -H "Accept: application/vnd.github+json" \
+  -f "required_pull_request_reviews[dismiss_stale_reviews]=false" \
+  -F "required_pull_request_reviews[required_approving_review_count]=1" \
+  -F "enforce_admins=true" \
+  -f "restrictions=null" \
+  -f "required_status_checks[strict]=true" \
+  -f "required_status_checks[contexts][]=Release"
+```
+
+Remind the user:
+- `enforce_admins: true` means even repo admins cannot bypass the rules
+- They can adjust these settings later in GitHub repo Settings > Branches
 
 ---
 
