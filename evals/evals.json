@@ -1,0 +1,42 @@
+{
+  "skill_name": "conventional-commits",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "Set up conventional commits and semantic versioning in this repo. I want automated version bumps based on my commit messages.",
+      "expected_output": "Installs semantic-release and plugins, creates .releaserc.json with correct plugin order, adds release script to package.json. Asks about commitlint/husky and CI workflow.",
+      "files": [],
+      "expectations": [
+        "semantic-release is installed as a devDependency",
+        ".releaserc.json is created with @semantic-release/commit-analyzer using conventionalcommits preset",
+        "Plugin order in .releaserc.json is: commit-analyzer, release-notes-generator, changelog, npm, github, git",
+        "A 'release' script is added to package.json",
+        "The user is asked whether they want commitlint + husky enforcement",
+        "The user is asked whether they want a GitHub Actions workflow"
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "I want to add semantic versioning to this project. I think we already have standard-version set up from a while back, not sure though. Can you check and set up whatever we need?",
+      "expected_output": "Detects existing standard-version setup, reports findings to user, asks for confirmation before removal, then installs semantic-release.",
+      "files": [],
+      "expectations": [
+        "The existing versioning tool is detected and reported to the user",
+        "The user is asked for confirmation before any removal happens",
+        "After removal (if confirmed), semantic-release is installed",
+        ".releaserc.json is created with conventionalcommits preset"
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "What commit message should I use if I'm making a breaking change to our API? I renamed several public endpoints.",
+      "expected_output": "Explains the BREAKING CHANGE format, shows examples with both ! syntax and footer syntax, explains this triggers a MAJOR version bump.",
+      "files": [],
+      "expectations": [
+        "The response explains that breaking changes trigger a MAJOR version bump",
+        "At least one example commit message is provided",
+        "Both the ! prefix syntax and BREAKING CHANGE footer syntax are mentioned"
+      ]
+    }
+  ]
+}
