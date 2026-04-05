@@ -1,0 +1,22 @@
+{
+  "name": "arc-conventional-commits",
+  "version": "1.0.0",
+  "description": "A Claude Code skill that injects Conventional Commits with semantic-release into any repository for automated semantic versioning.",
+  "private": true,
+  "scripts": {
+    "release": "semantic-release"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "@semantic-release/changelog": "^6.0.3",
+    "@semantic-release/commit-analyzer": "^13.0.1",
+    "@semantic-release/git": "^10.0.1",
+    "@semantic-release/github": "^12.0.6",
+    "@semantic-release/npm": "^13.1.5",
+    "@semantic-release/release-notes-generator": "^14.1.0",
+    "conventional-changelog-conventionalcommits": "^9.3.1",
+    "semantic-release": "^25.0.3"
+  }
+}
